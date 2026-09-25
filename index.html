@@ -1,21 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spearfishing Weather Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        marine: {
-                            900: '#0b132b',
-                            800: '#1c2541',
-                            700: '#3a506b',
-                            accent: '#5bc0be',
-                            light: '#e0fbfc'
+<!DOCTYPE html>fc'
                         }
                     },
                     fontFamily: {
@@ -86,6 +69,17 @@
                 <p class="text-red-300/70 text-sm">Unable to retrieve forecast data. Please check your connection and try again.</p>
             </div>
 
+            <!-- GO Summary Container (Injected via JS) -->
+            <div id="goSummaryContainer" class="hidden mb-8 bg-gradient-to-br from-emerald-900/30 to-marine-800 border border-emerald-500/30 rounded-2xl p-6 shadow-xl">
+                <h2 class="text-lg md:text-xl font-black text-emerald-400 mb-4 flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Upcoming "GO" Windows
+                </h2>
+                <ul id="goSummaryList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- GO times will be injected here -->
+                </ul>
+            </div>
+
             <!-- Locations Container (Injected via JS) -->
             <div id="locationsContainer" class="hidden flex-col space-y-12">
                 <!-- Location blocks will be injected here -->
@@ -116,6 +110,8 @@
         const container = document.getElementById('locationsContainer');
         const loader = document.getElementById('loader');
         const errorBox = document.getElementById('errorBox');
+        const goSummaryContainer = document.getElementById('goSummaryContainer');
+        const goSummaryList = document.getElementById('goSummaryList');
 
         async function fetchAllForecasts() {
             uiState('loading');
@@ -171,12 +167,54 @@
                 // Wait for all locations to load
                 const allData = await Promise.all(fetchPromises);
                 
+                renderSummary(allData);
                 renderDashboard(allData);
                 uiState('success');
 
             } catch (err) {
                 console.error("Failed to load forecast:", err);
                 uiState('error');
+            }
+        }
+
+        function renderSummary(allData) {
+            goSummaryList.innerHTML = '';
+            let goCount = 0;
+
+            // Scan all loaded data for GO conditions
+            allData.forEach(location => {
+                location.forecast.forEach(day => {
+                    const dObj = new Date(day.date);
+                    const dayName = dObj.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+                    
+                    day.slots.forEach(slot => {
+                        if (slot.data) {
+                            // Check if condition strictly meets 'GO' thresholds
+                            if (slot.data.windSpeed <= thresholds.warnWind && slot.data.waveHeight <= thresholds.warnWave) {
+                                goCount++;
+                                const li = document.createElement('li');
+                                li.className = "flex flex-col justify-center bg-marine-900/60 p-3.5 rounded-xl border border-emerald-500/30 hover:border-emerald-400/60 transition-colors shadow-sm";
+                                li.innerHTML = `
+                                    <div class="flex justify-between items-start mb-1">
+                                        <span class="font-bold text-white text-sm">${location.name}</span>
+                                        <span class="px-2 py-0.5 rounded text-[9px] font-black tracking-widest border bg-emerald-500/10 text-emerald-400 border-emerald-500/30">GO</span>
+                                    </div>
+                                    <div class="text-xs text-marine-light/70 mb-2.5 font-medium">${dayName} &bull; ${slot.name} (${slot.time})</div>
+                                    <div class="flex gap-4 text-xs font-bold">
+                                        <span class="text-marine-light flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>${slot.data.windSpeed.toFixed(1)}kn</span>
+                                        <span class="text-marine-light flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>${slot.data.waveHeight.toFixed(1)}m</span>
+                                    </div>
+                                `;
+                                goSummaryList.appendChild(li);
+                            }
+                        }
+                    });
+                });
+            });
+
+            // Fallback UI if no perfect conditions exist
+            if (goCount === 0) {
+                goSummaryList.innerHTML = `<li class="col-span-full text-marine-light/60 text-sm italic p-4 bg-marine-900/40 rounded-xl border border-marine-700/50">No optimal 'GO' windows detected in the current 5-day forecast across these locations. Keep an eye out for MARGINAL times below.</li>`;
             }
         }
 
@@ -281,9 +319,13 @@
             loader.classList.add('hidden');
             container.classList.add('hidden');
             errorBox.classList.add('hidden');
+            goSummaryContainer.classList.add('hidden');
 
             if (state === 'loading') loader.classList.remove('hidden');
-            if (state === 'success') container.classList.remove('hidden');
+            if (state === 'success') {
+                container.classList.remove('hidden');
+                goSummaryContainer.classList.remove('hidden');
+            }
             if (state === 'error') errorBox.classList.remove('hidden');
         }
 
